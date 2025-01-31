@@ -1,0 +1,8 @@
+*.tar
+*.pyc
+*.pkl
+*.jar
+checkpoints/
+checkpoints_old/
+gpt2/
+data/
