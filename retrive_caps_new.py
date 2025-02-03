@@ -182,8 +182,8 @@ def filter_nns(nns, xb_image_ids, captions, xq_image_ids, caplens):
 
 
 def main():
-    data_folder = './data/LEVIR_CC'
-    split = 'TRAIN'
+    data_folder = './data/LEVIR_CC/v1'
+    split = 'TEST'
     data_name = 'LEVIR_CC_5_cap_per_img'
     clip_model_type = 'ViT-B/32'
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -206,6 +206,7 @@ def main():
     #captions = captions[:500]
     #encode_imgs:
     for image in imgs:
+
         if image['changeflag']==1:
             A = preprocess(Image.fromarray(image['ori_img'][0])).unsqueeze(0)  # [1,3,224,224]
             B = preprocess(Image.fromarray(image['ori_img'][1])).unsqueeze(0)
@@ -216,9 +217,10 @@ def main():
                 difs.append(dif)
                 image_ids.append(indexi)
                 for i in range(5):
-                    changed_captions.append(captions[indexi*5+i])
-                    changed_captions_lens.append(caplens[indexi*5+i])
-                    caption_ids.append(indexi)
+                    if indexi*5 + i < len(captions):
+                        changed_captions.append(captions[indexi*5+i])
+                        changed_captions_lens.append(caplens[indexi*5+i])
+                        caption_ids.append(indexi)
         indexi = indexi+1
         #break
 
@@ -248,7 +250,7 @@ def main():
     #print("Writing files")
     #faiss.write_index(index, "datastore/coco_index")
     #json.dump(captions, open("datastore/coco_index_captions.json", "w"), indent=2)
-    path =  os.path.join(data_folder, split + '_retrived_caps.json')
+    path =  os.path.join(data_folder, split + '_retrived_caps_v2.json')
     json.dump(
         retrieved_caps, open(path, "w"), indent=2
     )

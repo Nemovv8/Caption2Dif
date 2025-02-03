@@ -27,7 +27,7 @@ class CaptionDataset(Dataset):
         self.split = split
         self.dataset_name = dataset_name
         assert self.split in {'TRAIN', 'VAL', 'TEST'}
-        path = os.path.join(data_folder, split + '_retrived_caps' + '.json')
+        path = os.path.join(data_folder, 'TRAIN' + '_retrived_caps' + '.json')#临时改动
         if split=='TRAIN':
             with open(path) as f:
                 retrived_caps = json.load(f)
@@ -35,10 +35,11 @@ class CaptionDataset(Dataset):
 
         #
         clip_model_name = clip_model_type.replace('/', '_')
-        data_path = os.path.join(data_folder, split +'_'+ data_name + '.pkl')
+        data_path = os.path.join('data/LEVIR_CC/v1', split +'_'+ data_name + '.pkl')
 
         with open(data_path, 'rb') as f:
             all_data = pickle.load(f)  #dict_keys(['images', 'captions', 'caplens'])
+            print(all_data)
 
         self.imgs = all_data['images']  #6815,每个位置存储 两张图片和一个changeflag，里面图片的大小为分别为[256,256,3], self.imgs[1]['ori_img'][0]可以拿到第一张图片
 

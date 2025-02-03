@@ -130,12 +130,13 @@ def create_input_files(args,dataset, karpathy_json_path, image_folder, captions_
     seed(123)
     device = torch.device('cuda:0')
     # print('train_image_captions', train_image_captions)
-    for impaths, imcaps, imchangeflag, imgid, split in [(train_image_paths, train_image_captions, train_image_changeflag, train_image_id, 'TRAIN'),
-                                   (val_image_paths, val_image_captions, val_image_changeflag, val_image_id, 'VAL'),
+    for impaths, imcaps, imchangeflag, imgid, split in [
                                    (test_image_paths, test_image_captions, test_image_changeflag, test_image_id, 'TEST')]:
+        # (train_image_paths, train_image_captions, train_image_changeflag, train_image_id, 'TRAIN'),
+        # (val_image_paths, val_image_captions, val_image_changeflag, val_image_id, 'VAL'),
         # print('imcaps', imcaps)
         out_path = os.path.join(output_folder, split +'_' + base_filename + '.pkl')
-        caps_path = 'data/LEVIR_CC/TRAIN_retrived_caps.json'
+        caps_path = 'data/LEVIR_CC/merged_retrieved_captions.json'
         feature_list = []
         enc_captions = []
         enco_captions = []
@@ -166,7 +167,7 @@ def create_input_files(args,dataset, karpathy_json_path, image_folder, captions_
             if len(imcaps[i]) < captions_per_image:
                 captions = imcaps[i] + [choice(imcaps[i]) for _ in range(captions_per_image - len(imcaps[i]))]
 
-            if split == 'TRAIN':
+            if split == 'TEST':
                 # for nochanged image pairs, just use one kind of nochanged captions during the training
                 if imchangeflag[i] == 0:
                         # 填充 || 部分
@@ -233,8 +234,8 @@ def create_input_files(args,dataset, karpathy_json_path, image_folder, captions_
         flat_captions = [item for sublist in enc_captions for item in sublist]
         processed_captions, caplens = process_captions(flat_captions)
 
-        # print('flat_captions', flat_captions)
-        # print('caplens', caplens)
+        print('flat_captions', flat_captions)
+        print('caplens', caplens)
         with open(out_path, 'wb') as f:
             pickle.dump({"images": feature_list, "captions": processed_captions, 'caplens': caplens}, f)
 
@@ -251,7 +252,7 @@ if __name__ == '__main__':
                        image_folder=r'./data/LEVIR_CC/images',
                        captions_per_image=5,
                        min_word_freq=5,
-                       output_folder=r'./data/LEVIR_CC',
+                       output_folder=r'./data/LEVIR_CC/v1',
                        max_len=50)
 
     # print('create_input_files END at: ', time.strftime("%m-%d  %H : %M : %S", time.localtime(time.time())))

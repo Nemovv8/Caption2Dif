@@ -35,6 +35,8 @@ def evaluate(args, dataloader,tokenizer, model):
         changeflag_correct_nochange = 0
         total = 0
         with torch.no_grad():
+            print(len(dataloader.dataset))  # 打印数据集的长度
+
             for i, (ori_img, changeflag, caps, mask, caplens, all_captions) in enumerate(tqdm(dataloader, desc=" EVALUATING AT BEAM SIZE " + str(args.beam_size))):
                 # if i>20:
                 #     break

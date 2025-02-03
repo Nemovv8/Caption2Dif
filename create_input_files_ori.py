@@ -162,7 +162,7 @@ if __name__ == '__main__':
                        image_folder=r'./data/LEVIR_CC/images',
                        captions_per_image=5,
                        min_word_freq=5,
-                       output_folder=r'./data/LEVIR_CC',
+                       output_folder=r'./data/LEVIR_CC/v1',
                        max_len=50)
 
     print('create_input_files END at: ', time.strftime("%m-%d  %H : %M : %S", time.localtime(time.time())))
