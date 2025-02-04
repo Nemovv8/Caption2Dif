@@ -183,7 +183,7 @@ def filter_nns(nns, xb_image_ids, captions, xq_image_ids, caplens):
 
 def main():
     data_folder = './data/LEVIR_CC/v1'
-    split = 'TEST'
+    split = 'TRAIN'
     data_name = 'LEVIR_CC_5_cap_per_img'
     clip_model_type = 'ViT-B/32'
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -205,24 +205,41 @@ def main():
     #imgs = imgs[:100]
     #captions = captions[:500]
     #encode_imgs:
-    for image in imgs:
+    # for image in imgs:
 
-        if image['changeflag']==1:
-            A = preprocess(Image.fromarray(image['ori_img'][0])).unsqueeze(0)  # [1,3,224,224]
+    #     if image['changeflag']==1:
+    #         A = preprocess(Image.fromarray(image['ori_img'][0])).unsqueeze(0)  # [1,3,224,224]
+    #         B = preprocess(Image.fromarray(image['ori_img'][1])).unsqueeze(0)
+    #         with torch.no_grad():
+    #             clip_emb_A, img_feat_A = clip_model.encode_image(A.to(device))  # [1,512]，[1,7*7,768]
+    #             clip_emb_B, img_feat_B = clip_model.encode_image(B.to(device))
+    #             dif = (clip_emb_B-clip_emb_A).cpu().numpy()
+    #             difs.append(dif)
+    #             image_ids.append(indexi)
+    #             for i in range(5):
+    #                 if indexi*5 + i < len(captions):
+    #                     changed_captions.append(captions[indexi*5+i])
+    #                     changed_captions_lens.append(caplens[indexi*5+i])
+    #                     caption_ids.append(indexi)
+    #     indexi = indexi+1
+        #break
+    for image in imgs:
+        if image['changeflag'] == 1:
+            A = preprocess(Image.fromarray(image['ori_img'][0])).unsqueeze(0)
             B = preprocess(Image.fromarray(image['ori_img'][1])).unsqueeze(0)
             with torch.no_grad():
-                clip_emb_A, img_feat_A = clip_model.encode_image(A.to(device))  # [1,512]，[1,7*7,768]
+                clip_emb_A, img_feat_A = clip_model.encode_image(A.to(device))
                 clip_emb_B, img_feat_B = clip_model.encode_image(B.to(device))
-                dif = (clip_emb_B-clip_emb_A).cpu().numpy()
+                dif = (clip_emb_B - clip_emb_A).cpu().numpy()
                 difs.append(dif)
-                image_ids.append(indexi)
-                for i in range(5):
-                    if indexi*5 + i < len(captions):
-                        changed_captions.append(captions[indexi*5+i])
-                        changed_captions_lens.append(caplens[indexi*5+i])
-                        caption_ids.append(indexi)
-        indexi = indexi+1
-        #break
+                image_ids.append(image['imgid'])  # 改成实际的 imgid
+            for i in range(5):
+                if indexi * 5 + i < len(captions):
+                    changed_captions.append(captions[indexi * 5 + i])
+                    changed_captions_lens.append(caplens[indexi * 5 + i])
+                    caption_ids.append(image['imgid'])  # 也用实际的 imgid
+        indexi += 1
+
 
     difs=np.concatenate(difs)
     print("Filtering captions")

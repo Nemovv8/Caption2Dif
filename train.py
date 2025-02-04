@@ -253,7 +253,7 @@ if __name__ == '__main__':
     # FIXME:用于验证集合
     parser.add_argument('--Split', default="TEST", help='which')
     parser.add_argument('--beam_size', type=int, default=3, help='beam_size.')
-    parser.add_argument('--savepath', default="./checkpoints/3-times/")
+    parser.add_argument('--savepath', default="./checkpoints_new/3-times/")
 
     args = parser.parse_args()
 

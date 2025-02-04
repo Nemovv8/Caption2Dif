@@ -115,6 +115,7 @@ def create_input_files(args,dataset, karpathy_json_path, image_folder, captions_
             test_image_captions.append(captions)
             test_image_changeflag.append(changeflag)
             test_image_id.append(image_id)
+            # print(f'TEST DATA - imgid:{image_id},changeflage : {changeflag}')
 
 
     # Sanity check
@@ -130,13 +131,16 @@ def create_input_files(args,dataset, karpathy_json_path, image_folder, captions_
     seed(123)
     device = torch.device('cuda:0')
     # print('train_image_captions', train_image_captions)
-    for impaths, imcaps, imchangeflag, imgid, split in [
-                                   (test_image_paths, test_image_captions, test_image_changeflag, test_image_id, 'TEST')]:
-        # (train_image_paths, train_image_captions, train_image_changeflag, train_image_id, 'TRAIN'),
-        # (val_image_paths, val_image_captions, val_image_changeflag, val_image_id, 'VAL'),
+    test_caption = 'data/LEVIR_CC/v1/TEST_retrived_caps_v2.json'
+    train_caption = 'data/LEVIR_CC/v1/TRAIN_retrived_caps_v2.json'
+    val_caption = 'data/LEVIR_CC/v1/VAL_retrived_caps_v2.json'
+    for impaths, imcaps, imchangeflag, imgid, caption_path, split, in [
+                                   (test_image_paths, test_image_captions, test_image_changeflag, test_image_id, test_caption, 'TEST'),
+                                   (train_image_paths, train_image_captions, train_image_changeflag, train_image_id, train_caption, 'TRAIN'),
+                                    (val_image_paths, val_image_captions, val_image_changeflag, val_image_id, val_caption, 'VAL')]:
         # print('imcaps', imcaps)
         out_path = os.path.join(output_folder, split +'_' + base_filename + '.pkl')
-        caps_path = 'data/LEVIR_CC/merged_retrieved_captions.json'
+        caps_path = caption_path
         feature_list = []
         enc_captions = []
         enco_captions = []
@@ -150,6 +154,10 @@ def create_input_files(args,dataset, karpathy_json_path, image_folder, captions_
 
 
         for i, path in enumerate(tqdm(impaths)):
+            # if len(imchangeflag) <= i:
+            #     print(f"Error: imchangeflag is empty or out of index at i={i}")
+            #     continue  # 避免报错
+            # print(f"Processing index {i}, imgid={imgid[i]}, changeflag={imchangeflag[i]}")
             imgid[i] = str(imgid[i])
             filled_templates = []
             counter += 1
@@ -168,6 +176,9 @@ def create_input_files(args,dataset, karpathy_json_path, image_folder, captions_
                 captions = imcaps[i] + [choice(imcaps[i]) for _ in range(captions_per_image - len(imcaps[i]))]
 
             if split == 'TEST':
+                # if not imcaps[i]:
+                #     print(f'error: imcaps[{i}] is empty')
+                #     continue
                 # for nochanged image pairs, just use one kind of nochanged captions during the training
                 if imchangeflag[i] == 0:
                         # 填充 || 部分
@@ -192,12 +203,16 @@ def create_input_files(args,dataset, karpathy_json_path, image_folder, captions_
                 else:
                     # print_nth_pair(retrieved_caps, 1) 
                     # 填充||部分
+                    print(f"🔍 Checking imgid[{i}] = {imgid[i]}")
+                    print(f"🔍 retrieved_caps keys (first 10): {list(retrieved_caps.keys())[:10]}")
                     if imgid[i] in retrieved_caps:
                         value_of_retrieved_caps = retrieved_caps[imgid[i]]  # 获取对应的 value
                         caption_of_retrieved_caps = [lst[0] for lst in value_of_retrieved_caps]
                         merged_captions = "\n".join(caption_of_retrieved_caps)
                         template_1 = template.replace("||", merged_captions)  # 替换 || 占位符
                         # print("Filled Template:\n", template_1)
+                    else:
+                        print(f"❌ imgid[{i}] = {imgid[i]} NOT found in retrieved_caps!")
 
                     # 填充 ** 部分
                     filled_templates = []
@@ -252,7 +267,7 @@ if __name__ == '__main__':
                        image_folder=r'./data/LEVIR_CC/images',
                        captions_per_image=5,
                        min_word_freq=5,
-                       output_folder=r'./data/LEVIR_CC/v1',
+                       output_folder=r'./data/LEVIR_CC/v2',
                        max_len=50)
 
     # print('create_input_files END at: ', time.strftime("%m-%d  %H : %M : %S", time.localtime(time.time())))

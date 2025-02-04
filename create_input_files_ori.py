@@ -66,6 +66,7 @@ def create_input_files(args,dataset, karpathy_json_path, image_folder, captions_
             path2 = os.path.join(image_folder, img['split'], 'B', img['filename'])
             path = [path1, path2]
             changeflag = img['changeflag']
+            imgid = img['imgid']
 
         if img['split'] in {'train'}:
             train_image_paths.append(path)
@@ -130,7 +131,7 @@ def create_input_files(args,dataset, karpathy_json_path, image_folder, captions_
             if dataset =='LEVIR_CC':
                 ori_img_A = io.imread(impaths[i][0])
                 ori_img_B = io.imread(impaths[i][1])
-                images = {'ori_img': [ori_img_A, ori_img_B], 'changeflag': imchangeflag[i]}
+                images = {'ori_img': [ori_img_A, ori_img_B], 'changeflag': imchangeflag[i], 'imgid': imgid}
             else:
                 print("Error")
 
