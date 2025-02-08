@@ -39,7 +39,7 @@ class CaptionDataset(Dataset):
 
         with open(data_path, 'rb') as f:
             all_data = pickle.load(f)  #dict_keys(['images', 'captions', 'caplens'])
-            print(all_data)
+#            print(all_data)
 
         self.imgs = all_data['images']  #6815,每个位置存储 两张图片和一个changeflag，里面图片的大小为分别为[256,256,3], self.imgs[1]['ori_img'][0]可以拿到第一张图片
 
@@ -113,6 +113,7 @@ class CaptionDataset(Dataset):
             B = self.preprocess(Image.fromarray(ori_img_list[1])).unsqueeze(0)
             ori_img = (torch.cat([A, B], dim=0))  #[2,3,224,224]
             changeflag = img_dict['changeflag']
+            imgid = img_dict.get('imgid', None)  # 确保 imgid 存在
 
         # FIXME:
         tokens, mask = self.pad_tokens(i)
@@ -124,7 +125,7 @@ class CaptionDataset(Dataset):
         if self.split == 'TRAIN':
             # if changeflag==1:
             #     print(changeflag)
-            return ori_img, changeflag, caption, mask, caplen
+            return ori_img, changeflag, caption, mask, caplen, imgid
             # ori_img[b,3,224,224]#
             # changeflag0/1
             # captions里已经是对应的编码了，并被统一到了一个一样的长度，不足部分填0，多余部分直接截掉
@@ -138,7 +139,7 @@ class CaptionDataset(Dataset):
                 one_caption, _ = self.pad_tokens(k)
                 caption_setlist.append(one_caption.tolist())
             all_captions = torch.LongTensor(caption_setlist)
-            return ori_img, changeflag, caption, mask, caplen, all_captions
+            return ori_img, changeflag, caption, mask, caplen, all_captions, imgid
 
     def __len__(self):
         return self.dataset_size

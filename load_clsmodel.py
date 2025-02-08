@@ -194,7 +194,7 @@ class Pretrained_model(nn.Module):
         img_refine = conc_A[:, 1:, :]  # NLD
         return cls_A, img_refine
 
-    def Classifier(self, clip_emb, img_feat):
+    def Classifier(self, clip_emb, img_feat, imgid = None):
         # img_feat = self.pre_linear(img_feat)
         img_feat_A = img_feat[:, 0, ...]  # (N,L=7*7=49,768)   #[1,512]
         img_feat_B = img_feat[:, 1, ...]                #[1,512]
@@ -218,10 +218,10 @@ class Pretrained_model(nn.Module):
         conc_A = self.transformer_encoder_classifier(conc_A.permute(1, 0, 2)).permute(1, 0, 2)  # NLD
         changeflag = self.classifier_projection(conc_A[:, 0, :])  #线性层,从[B,50,1536]中取出为了做预测的embeding层[B,1536]=>[B,2]
 
-        return changeflag
+        return changeflag, imgid
 
     def forward(self, tokens, changeflag, area, ori_img, clip_emb, featuremap, mask: Optional[torch.Tensor] = None,
-                labels: Optional[torch.Tensor] = None):
+                labels: Optional[torch.Tensor] = None, imgid = None):
 
         # bridge Network
         changeflag = self.Classifier(clip_emb, featuremap)

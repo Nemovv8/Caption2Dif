@@ -1,4 +1,3 @@
-
 import time
 import os
 import numpy as np
@@ -38,14 +37,17 @@ def create_input_files(args,dataset, karpathy_json_path, image_folder, captions_
     train_image_paths = []
     train_image_captions = []
     train_image_changeflag = []
+    train_image_ids = []
 
     val_image_paths = []
     val_image_captions = []
     val_image_changeflag = []
+    val_image_ids = []
 
     test_image_paths = []
     test_image_captions = []
     test_image_changeflag = []
+    test_image_ids = []
 
     # word_freq = Counter()  # 创建一个空的Counter类(计数
 
@@ -72,15 +74,18 @@ def create_input_files(args,dataset, karpathy_json_path, image_folder, captions_
             train_image_paths.append(path)
             train_image_captions.append(captions)
             train_image_changeflag.append(changeflag)
+            train_image_ids.append(imgid)
             # train_num = train_num+1
         elif img['split'] in {'val'}:
             val_image_paths.append(path)
             val_image_captions.append(captions)
             val_image_changeflag.append(changeflag)
+            val_image_ids.append(imgid)
         elif img['split'] in {'test'}:
             test_image_paths.append(path)
             test_image_captions.append(captions)
             test_image_changeflag.append(changeflag)
+            test_image_ids.append(imgid)
 
     # Sanity check
     assert len(train_image_paths) == len(train_image_captions)
@@ -95,9 +100,9 @@ def create_input_files(args,dataset, karpathy_json_path, image_folder, captions_
     seed(123)
     device = torch.device('cuda:0')
 
-    for impaths, imcaps, imchangeflag, split in [(train_image_paths, train_image_captions, train_image_changeflag, 'TRAIN'),
-                                   (val_image_paths, val_image_captions, val_image_changeflag, 'VAL'),
-                                   (test_image_paths, test_image_captions, test_image_changeflag, 'TEST')]:
+    for impaths, imcaps, imchangeflag, imgid, split in [(train_image_paths, train_image_captions, train_image_changeflag, train_image_ids, 'TRAIN'),
+                                   (val_image_paths, val_image_captions, val_image_changeflag, val_image_ids, 'VAL'),
+                                   (test_image_paths, test_image_captions, test_image_changeflag, test_image_ids, 'TEST')]:
 
         out_path = os.path.join(output_folder, split +'_' + base_filename + '.pkl')
 
@@ -131,7 +136,8 @@ def create_input_files(args,dataset, karpathy_json_path, image_folder, captions_
             if dataset =='LEVIR_CC':
                 ori_img_A = io.imread(impaths[i][0])
                 ori_img_B = io.imread(impaths[i][1])
-                images = {'ori_img': [ori_img_A, ori_img_B], 'changeflag': imchangeflag[i], 'imgid': imgid}
+                images = {'ori_img': [ori_img_A, ori_img_B], 'changeflag': imchangeflag[i], 'imgid': imgid[i]}
+                # print(f"Processed imgid: {imgid}")  
             else:
                 print("Error")
 
@@ -150,6 +156,14 @@ def create_input_files(args,dataset, karpathy_json_path, image_folder, captions_
         #把图片对（里面包含两个图片和是否改变的flag）,加上了句号的captions，captions句子的长度 写进文件中
         with open(out_path, 'wb') as f:
             pickle.dump({"images": feature_list, "captions": enc_captions, 'caplens': caplens}, f)
+        # Load and print the first few entries of the written .pkl file
+        with open(out_path, 'rb') as f:
+            data = pickle.load(f)
+            print("Sample data from the .pkl file:")
+            print("Images:", data["images"][:5])  # 打印前5个图像相关内容
+            print("Captions:", data["captions"][:5])  # 打印前5个caption
+            print("Caplens:", data["caplens"][:5])  # 打印前5个caption的长度
+
 
 if __name__ == '__main__':
 

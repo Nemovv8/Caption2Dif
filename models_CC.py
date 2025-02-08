@@ -8,6 +8,7 @@ import math
 import clip
 from torch.nn.modules.container import ModuleList
 import copy
+import json
 
 # from load_clsmodel import device
 from load_clsmodel import Pretrained_model
@@ -126,6 +127,11 @@ class Image_Encoder(nn.Module):
         # gpt2_type = r'C:\Users\lcy\.cache\huggingface\hub\models--gpt2\snapshots\e7da7f221d5bf496a48136c0cd264e630fe9fcc8'
         #self.tokenizer = AutoTokenizer.from_pretrained(gpt2_type)
         self.tokenizer = GPT2Tokenizer.from_pretrained(gpt2_type)
+        # Fix me hgs
+        # 读取 retrieve_caps.json
+        with open("retrieved_captions.json", "r") as f:
+            self.retrieved_captions = json.load(f)
+
         self.gpt_encoderimg = GPT2LMHeadModel.from_pretrained(gpt2_type)
 
         # cls_model
@@ -188,7 +194,9 @@ class Image_Encoder(nn.Module):
         img_refine = conc_A[:, 1:, :]  # NLD
         return cls_A, img_refine
 
-    def forward(self, changeflag, ori_img):  #ori_img:[B,2,3,224,224]
+    def forward(self, changeflag, ori_img, imgid = None):  #ori_img:[B,2,3,224,224]
+        if imgid is None:
+            raise ValueError('Error: imgid is None in Image_Encoder.forward')
         img_A = ori_img[:, 0, ...]   #[B,3,224,224]
         img_B = ori_img[:, 1, ...]     #[B,3,224,224]
         clip_emb_A, img_feat_A = self.clip_model.encode_image(img_A)   #这里输出只有一个[1,512]，怀疑clip_emd_A没用  #后面修改了clip的库函数 这里img_feat_A[B,7*7,768]
@@ -200,6 +208,7 @@ class Image_Encoder(nn.Module):
         # GT changeflag or preflag for training
         preflag = self.classification_module.Classifier(0, featuremap)
         # changeflag = torch.argmax(preflag, 1)
+        use_flag = preflag if is_test else changeflag  # 训练用 changeflag，测试用 preflag
 
         if self.clip_feat_dim != self.d_model:
             img_feat_A = self.projection(img_feat_A)  # (N,L,768)-》(N,L,768)  这里实际没有走
@@ -230,7 +239,30 @@ class Image_Encoder(nn.Module):
 
         # 1\\Auto Generate prompt
         # project two changeflag to different prompt  Pc0和Pc1在changeflag下的线性组合
-        change_proto_prompt = self.changeflag2prompt(changeflag)#【4】=》【4,1,768】
+        # change_proto_prompt = self.changeflag2prompt(changeflag)#【4】=》【4,1,768】
+        prompts = []
+        for i in range(batch):
+            img_id = str(imgid[i].item())  # 确保 imgid 作为字符串索引 JSON
+
+            if use_flag[i] == 0:  # changeflag=0: 用原 prompt 结构
+                change_proto_prompt = self.changeflag2prompt(use_flag[i].unsqueeze(0))
+                prompt = torch.cat([img_feat_A[i].unsqueeze(0), img_feat_B[i].unsqueeze(0), change_proto_prompt], dim=1)
+
+            else:  # changeflag=1: 使用 retrieve_caps.json 得到的相似描述
+                similar_texts = self.retrieved_captions.get(img_id, ["No similar captions found."])
+                similar_text = " ".join(similar_texts[:5])  # 取前5个相似描述
+                text_prompt = f"Similar image pairs' difference are: {similar_text}. The scene shows the following changes:"
+        
+        # 令 GPT2 生成 embedding 作为 Prompt
+                text_tokens = self.tokenizer.encode(text_prompt, return_tensors="pt").to(device)
+                text_embedding = self.gpt_encoderimg.transformer.wte(text_tokens)
+
+                prompt = torch.cat([img_feat_A[i].unsqueeze(0), img_feat_B[i].unsqueeze(0), text_embedding], dim=1)
+
+            prompts.append(prompt)
+
+            output = torch.cat(prompts, dim=0)
+
         # unified prompt for captioning  Pu
         prompt = self.prompt.unsqueeze(0).expand(batch, *self.prompt.shape)  #self.prompt[5,768]=>扩充之后【4,5,768,】
         uni_prompt_1 = prompt[:, :self.uni_prompt_1_len, ...]
@@ -258,6 +290,7 @@ class LEVIR_CC_CaptionModel(nn.Module):
         self.decoder_mode = decoder_mode
         self.img_feature_h = img_feature_h
         self.img_feature_w = img_feature_w
+        self.imgid = None  # 添加 imgid 属性
 
         if self.decoder_mode == 'gpt2':
             gpt2_type = 'gpt2'
@@ -288,13 +321,22 @@ class LEVIR_CC_CaptionModel(nn.Module):
         self.Image_Encoder.clip_model.eval()
         self.Image_Encoder.classification_module.eval()
 
+        def set_imgid(self, imgid):
+            """
+            设置 imgid 属性，供 forward 方法使用
+            """
+            self.imgid = imgid
+
     def dual_branch_func(self, changeflag, out):
         output = self.lm_head_change(out)
         return output, 0
 
     def forward(self, tokens, changeflag, ori_img, mask: Optional[torch.Tensor] = None):
+        if self.imgid is None:
+            raise ValueError("Error: imgid is None in forward pass of LEVIR_CC_CaptionModel")
 
-        Sim_cls_AB, pre_flag, prefix_projections = self.Image_Encoder(changeflag, ori_img)     #.view(-1, self.prefix_length, self.gpt_embedding_size)
+        # Sim_cls_AB, pre_flag, prefix_projections = self.Image_Encoder(changeflag, ori_img)     #.view(-1, self.prefix_length, self.gpt_embedding_size)
+        Sim_cls_AB, pre_flag, prefix_projections = self.Image_Encoder(changeflag, ori_img, imgid = self.imgid)
         embedding_text = self.gpt_decoder.transformer.wte(tokens)  #[B,50] -> NLD[B,50,768] ,对tokens（即被转化成编码的captions）进行encode
 
         loss = 0

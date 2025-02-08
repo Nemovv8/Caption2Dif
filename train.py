@@ -9,9 +9,10 @@ from transformers import GPT2Tokenizer
 from datasets import CaptionDataset
 from utils import *
 
-from models_CC import LEVIR_CC_CaptionModel
+from models_CC_ori import LEVIR_CC_CaptionModel
 from eval2 import evaluate
 from tqdm import tqdm
+import json
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.backends.cudnn.benchmark = True
 
@@ -36,7 +37,7 @@ def train(args, train_loader, Caption_model, Caption_model_optimizer,Caption_mod
     correct = 0
     total = 0
     accum_steps = 3
-    for idx, (ori_img, changeflag, caps, mask, caplens) in enumerate(tqdm(train_loader, desc=f'Epoch [{epoch+1}/{args.epochs}]', unit='batch')):
+    for idx, (ori_img, changeflag, caps, mask, caplens, imgid) in enumerate(tqdm(train_loader, desc=f'Epoch [{epoch+1}/{args.epochs}]', unit='batch')):
         # if idx ==10:
         #     break
         # ori_img[B,2,3,224,224]
@@ -54,10 +55,13 @@ def train(args, train_loader, Caption_model, Caption_model_optimizer,Caption_mod
         caps = caps.to(device)
         mask = mask.to(device)
         caplens = caplens.to(device)
-
+        if imgid is None:  # 添加检查，确保 imgid 不为 None
+            raise ValueError("Error: imgid is None, check dataset loading process!")
         # Forward prop.
         if args.dataset_name == 'LEVIR_CC':
-            Sim_cls_AB, pre_flag, outputs = Caption_model(caps, changeflag, ori_img, mask)  #0,[B,2],[B,154,50257]
+            Caption_model.set_imgid(imgid)
+            # Sim_cls_AB, pre_flag, outputs = Caption_model(caps, changeflag, ori_img, mask)  #0,[B,2],[B,154,50257]
+            Sim_cls_AB, pre_flag, outputs = Caption_model(tokens=caps, changeflag=changeflag, ori_img=ori_img, mask=mask, imgid=imgid)
 
 
         logits = outputs[:, args.prefix_length - 1: -1]  #[4,50,50257]
@@ -115,6 +119,10 @@ def train(args, train_loader, Caption_model, Caption_model_optimizer,Caption_mod
 def main(args):
 
     print(time.strftime("%m-%d  %H : %M : %S", time.localtime(time.time())))
+    # load retrieve_Caps
+    retrieve_caps_path = './retrieved_caps/retrieved_captions.json'
+    with open(retrieve_caps_path, 'r') as f:
+        retrieve_caps = json.load(f)
 
     start_epoch = 0
     best_bleu4 = 0.  # BLEU-4 score right now
@@ -161,6 +169,7 @@ def main(args):
                                            img_feature_dim=img_feature_dim, img_feature_h=img_size[0],
                                            img_feature_w=img_size[1],
                                            num_layers=args.num_layers)
+    Caption_model.Image_Encoder.reretrieved_captions = retrieve_caps
 
     Caption_model.set_finetune(args.finetune_gpt2)
 
