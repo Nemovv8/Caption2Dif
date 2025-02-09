@@ -45,6 +45,7 @@ class CrossTransformer(nn.Module):
         self.linear1 = nn.Linear(d_model, d_model * 4)
         self.linear2 = nn.Linear(d_model * 4, d_model)
 
+
     def forward(self, input1, input2):
         batch_size = input1.size()[1]
         # 改进dif_as_kv
@@ -129,7 +130,7 @@ class Image_Encoder(nn.Module):
         self.tokenizer = GPT2Tokenizer.from_pretrained(gpt2_type)
         # Fix me hgs
         # 读取 retrieve_caps.json
-        with open("retrieved_captions.json", "r") as f:
+        with open("retrieved_caps/retrieved_captions.json", "r") as f:
             self.retrieved_captions = json.load(f)
 
         self.gpt_encoderimg = GPT2LMHeadModel.from_pretrained(gpt2_type)
@@ -176,14 +177,27 @@ class Image_Encoder(nn.Module):
 
         return img_refine_A, img_refine_B  # NLD
 
-    def changeflag2prompt(self, changeflag):  #changeflag.unsqueeze(-1).unsqueeze(-1)就是论文中的cls
-        batch = changeflag.shape[0]
+    def changeflag2prompt(self, batch, changeflag):  #changeflag.unsqueeze(-1).unsqueeze(-1)就是论文中的cls
+        batch = batch
         changefilter = changeflag.unsqueeze(-1).unsqueeze(-1)
         nochangefilter = 1 - changefilter
-        change_proto = self.change_proto.unsqueeze(0).expand(batch, *self.change_proto.shape)
-        nochange_proto = self.nochange_proto.unsqueeze(0).expand(batch, *self.change_proto.shape)
-        change_proto_prompt = change_proto * changefilter + nochange_proto * nochangefilter
-        return change_proto_prompt
+        print("self.change_proto shape before expand:", self.change_proto.shape)
+        change_proto = self.change_proto.expand(batch, -1, -1)  # [4,1,768]
+        nochange_proto = self.nochange_proto.expand(batch, -1, -1)  # [4,1,768]
+
+        print("change_proto shape after expand:", change_proto.shape)  
+        print("changefilter shape:", changefilter.shape)  
+
+        change_proto_prompt = change_proto * changefilter + nochange_proto * nochangefilter  
+        
+        print("change_proto_prompt shape:", change_proto_prompt.shape)  # [4,1,768]
+        # change_proto = self.change_proto.unsqueeze(0).expand(batch, *self.change_proto.shape)
+        # nochange_proto = self.nochange_proto.unsqueeze(0).expand(batch, *self.change_proto.shape)
+        # change_proto_prompt = change_proto * changefilter + nochange_proto * nochangefilter
+        # print("change_proto_prompt shape:", change_proto_prompt.shape)
+
+
+        return change_proto_prompt#为什么是【1，1，768】？
 
     def Siamese_bridge_net(self, class_embedding, img_feat):
         conc_A = torch.cat(
@@ -194,7 +208,10 @@ class Image_Encoder(nn.Module):
         img_refine = conc_A[:, 1:, :]  # NLD
         return cls_A, img_refine
 
-    def forward(self, changeflag, ori_img, imgid = None):  #ori_img:[B,2,3,224,224]
+    def forward(self, changeflag, ori_img, imgid = None, is_test=False):  #ori_img:[B,2,3,224,224]
+
+        max_text_len = 50  # 固定的文本部分长度
+        max_img_feat_len = 49
         if imgid is None:
             raise ValueError('Error: imgid is None in Image_Encoder.forward')
         img_A = ori_img[:, 0, ...]   #[B,3,224,224]
@@ -243,31 +260,51 @@ class Image_Encoder(nn.Module):
         prompts = []
         for i in range(batch):
             img_id = str(imgid[i].item())  # 确保 imgid 作为字符串索引 JSON
-
+            change_proto_prompt = self.changeflag2prompt(batch, use_flag[i].unsqueeze(0))
+            img_feat_A_part = img_feat_A[i].unsqueeze(0)  # (1, 49, 768)
+            img_feat_B_part = img_feat_B[i].unsqueeze(0)  # (1, 49, 768)
             if use_flag[i] == 0:  # changeflag=0: 用原 prompt 结构
-                change_proto_prompt = self.changeflag2prompt(use_flag[i].unsqueeze(0))
-                prompt = torch.cat([img_feat_A[i].unsqueeze(0), img_feat_B[i].unsqueeze(0), change_proto_prompt], dim=1)
 
-            else:  # changeflag=1: 使用 retrieve_caps.json 得到的相似描述
-                similar_texts = self.retrieved_captions.get(img_id, ["No similar captions found."])
-                similar_text = " ".join(similar_texts[:5])  # 取前5个相似描述
-                text_prompt = f"Similar image pairs' difference are: {similar_text}. The scene shows the following changes:"
-        
-        # 令 GPT2 生成 embedding 作为 Prompt
+                # 生成固定长度的文本部分（例如，填充或重复change_proto）
+                text_prompt = "No changes."
                 text_tokens = self.tokenizer.encode(text_prompt, return_tensors="pt").to(device)
+                if text_tokens.shape[1] < max_text_len:
+                    padding = torch.zeros((1, max_text_len - text_tokens.shape[1]), dtype=torch.long, device=device)
+                    text_tokens = torch.cat([text_tokens, padding], dim=1)
+                else:
+                    text_tokens = text_tokens[:, :max_text_len]
                 text_embedding = self.gpt_encoderimg.transformer.wte(text_tokens)
 
-                prompt = torch.cat([img_feat_A[i].unsqueeze(0), img_feat_B[i].unsqueeze(0), text_embedding], dim=1)
+            else:  # changeflag=1: 使用 retrieve_caps.json 得到的相似描述
+                similar_texts = self.retrieved_captions.get(img_id, ["No changes."])
+                similar_text = " ".join(similar_texts[:5])
+                text_prompt = f"Differences: {similar_text}"
+                text_tokens = self.tokenizer.encode(text_prompt, return_tensors="pt").to(device)
+                if text_tokens.shape[1] < max_text_len:
+                    padding = torch.zeros((1, max_text_len - text_tokens.shape[1]), dtype=torch.long, device=device)
+                    text_tokens = torch.cat([text_tokens, padding], dim=1)
+                else:
+                    text_tokens = text_tokens[:, :max_text_len]
+                text_embedding = self.gpt_encoderimg.transformer.wte(text_tokens)
 
+            # 统一拼接三部分：图像A特征、图像B特征、文本部分
+            prompt = torch.cat([img_feat_A_part, img_feat_B_part, text_embedding], dim=1)  # (1, 49+49+50=148, 768)
             prompts.append(prompt)
 
-            output = torch.cat(prompts, dim=0)
+        # 在batch维度拼接所有prompt
+        output = torch.cat(prompts, dim=0)  # (batch_size, 148, 768)
+
 
         # unified prompt for captioning  Pu
         prompt = self.prompt.unsqueeze(0).expand(batch, *self.prompt.shape)  #self.prompt[5,768]=>扩充之后【4,5,768,】
         uni_prompt_1 = prompt[:, :self.uni_prompt_1_len, ...]
         uni_prompt_2 = prompt[:, self.uni_prompt_1_len:, ...]
         # all prompt
+        change_proto_prompt = change_proto_prompt.expand(-1, fusion_feat.shape[1], -1)
+        print("fusion_feat shape:", fusion_feat.shape)
+        print("uni_prompt_1 shape:", uni_prompt_1.shape)
+        print("change_proto_prompt shape:", change_proto_prompt.shape)
+        print("uni_prompt_2 shape:", uni_prompt_2.shape)
         output = torch.cat([fusion_feat, uni_prompt_1, change_proto_prompt, uni_prompt_2], dim=1)  # NLD
         #[#[4,98,768],[4,5,768],[4,1,768],[4,0,768]]=》[4,104,768]
 
@@ -321,17 +358,17 @@ class LEVIR_CC_CaptionModel(nn.Module):
         self.Image_Encoder.clip_model.eval()
         self.Image_Encoder.classification_module.eval()
 
-        def set_imgid(self, imgid):
-            """
-            设置 imgid 属性，供 forward 方法使用
-            """
-            self.imgid = imgid
+    def set_imgid(self, imgid):
+        """
+        设置 imgid 属性，供 forward 方法使用
+        """
+        self.imgid = imgid
 
     def dual_branch_func(self, changeflag, out):
         output = self.lm_head_change(out)
         return output, 0
 
-    def forward(self, tokens, changeflag, ori_img, mask: Optional[torch.Tensor] = None):
+    def forward(self, tokens, changeflag, ori_img, mask: Optional[torch.Tensor] = None, is_test=False):
         if self.imgid is None:
             raise ValueError("Error: imgid is None in forward pass of LEVIR_CC_CaptionModel")
 
@@ -343,8 +380,16 @@ class LEVIR_CC_CaptionModel(nn.Module):
 
         embedding_cat = torch.cat((prefix_projections, embedding_text), dim=1)  #[B,104,768]&[B,50,768]=>[B,154,768]
         if self.decoder_mode == 'gpt2':
-            out = self.gpt_decoder(inputs_embeds=embedding_cat, attention_mask=mask) #1
-            # out = self.gpt_decoder(inputs_embeds=embedding_cat) #
+            batch_size = embedding_cat.shape[0]
+            seq_len = embedding_cat.shape[1]  # 154
+
+            # 重新创建匹配的 attention_mask
+            new_mask = torch.ones((batch_size, seq_len), dtype=torch.long, device=embedding_cat.device)#????????????????????????????
+
+            # 传入 GPT-2 解码器
+            out = self.gpt_decoder(inputs_embeds=embedding_cat, attention_mask=new_mask)
+            # out = self.gpt_decoder(inputs_embeds=embedding_cat, attention_mask=mask) #1
+            # # out = self.gpt_decoder(inputs_embeds=embedding_cat) #
             out = out.logits
             output, pre = self.dual_branch_func(changeflag, out)
 

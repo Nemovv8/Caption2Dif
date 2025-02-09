@@ -9,7 +9,7 @@ from transformers import GPT2Tokenizer
 from datasets import CaptionDataset
 from utils import *
 
-from models_CC_ori import LEVIR_CC_CaptionModel
+from models_CC import LEVIR_CC_CaptionModel
 from eval2 import evaluate
 from tqdm import tqdm
 import json
@@ -60,8 +60,9 @@ def train(args, train_loader, Caption_model, Caption_model_optimizer,Caption_mod
         # Forward prop.
         if args.dataset_name == 'LEVIR_CC':
             Caption_model.set_imgid(imgid)
+            # print('imgid is', imgid)
             # Sim_cls_AB, pre_flag, outputs = Caption_model(caps, changeflag, ori_img, mask)  #0,[B,2],[B,154,50257]
-            Sim_cls_AB, pre_flag, outputs = Caption_model(tokens=caps, changeflag=changeflag, ori_img=ori_img, mask=mask, imgid=imgid)
+            Sim_cls_AB, pre_flag, outputs = Caption_model(tokens=caps, changeflag=changeflag, ori_img=ori_img, mask=mask, is_test=args.is_test)
 
 
         logits = outputs[:, args.prefix_length - 1: -1]  #[4,50,50257]
@@ -258,7 +259,7 @@ if __name__ == '__main__':
     parser.add_argument('--workers', type=int, default=4, help='for data-loading; right now, only 0 works with h5pys in windows.')
     parser.add_argument('--model_lr', type=float, default=1e-4, help='learning rate for encoder if fine-tuning.')
     parser.add_argument('--grad_clip', type=float, default=5., help='clip gradients at an absolute value of.')
-
+    parser.add_argument('--is_test', default=False, help='test or not')
     # FIXME:用于验证集合
     parser.add_argument('--Split', default="TEST", help='which')
     parser.add_argument('--beam_size', type=int, default=3, help='beam_size.')

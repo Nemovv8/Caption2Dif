@@ -113,7 +113,9 @@ class CaptionDataset(Dataset):
             B = self.preprocess(Image.fromarray(ori_img_list[1])).unsqueeze(0)
             ori_img = (torch.cat([A, B], dim=0))  #[2,3,224,224]
             changeflag = img_dict['changeflag']
+
             imgid = img_dict.get('imgid', None)  # 确保 imgid 存在
+            # print(f"Before returning: imgid type = {type(imgid)}, value = {imgid}")
 
         # FIXME:
         tokens, mask = self.pad_tokens(i)
